@@ -1,0 +1,26 @@
+dpo:
+  beta: 0.1
+  reference_model_path: "checkpoints/stage2_best.pth"
+
+preference_data:
+  high_consistency_threshold: 0.8
+  low_consistency_threshold: 0.4
+  model_confidence_threshold: 0.9
+
+training:
+  peak_lr: 1e-5
+  min_lr: 1e-7
+  total_epochs: 10
+  batch_size: 64
+  warmup_epochs: 1
+  num_workers: 0
+
+data:
+  tuab_path: "data/tuh/tuab"
+  tusz_path: "data/tuh/tusz"
+  tuev_path: "data/tuh/tuev"
+  tuep_path: "data/tuh/tuep"
+  edf_path: "/home/taotl/Desktop/TUAR/v3.0.1/edf"
+  sample_rate: 200
+  window_sec: 10.0
+  stride_sec: 5.0

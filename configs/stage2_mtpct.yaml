@@ -1,0 +1,53 @@
+model:
+  n_prompt_tokens: 10
+  adapter_bottleneck_ratio: 4
+  freeze_backbone: true
+  num_tasks: 4
+
+tasks:
+  - name: "TUAB"
+    id: 0
+    type: "binary"
+    num_classes: 2
+    loss_weight: 1.0
+  - name: "TUSZ"
+    id: 1
+    type: "binary"
+    num_classes: 2
+    loss_weight: 1.0
+  - name: "TUEV"
+    id: 2
+    type: "multiclass"
+    num_classes: 6
+    loss_weight: 1.0
+  - name: "TUEP"
+    id: 3
+    type: "binary"
+    num_classes: 2
+    loss_weight: 1.0
+
+hierarchy:
+  lambda1: 1.0
+  lambda2: 1.0
+  gamma: 0.5
+
+training:
+  peak_lr: 1e-3
+  min_lr: 1e-6
+  weight_decay: 0.05
+  warmup_epochs: 3
+  total_epochs: 30
+  batch_size: 256
+  label_smoothing: 0.1
+  num_workers: 8
+
+data:
+  tuab_path: "data/tuh/tuab"
+  tusz_path: "data/tuh/tusz"
+  tuev_path: "data/tuh/tuev"
+  tuep_path: "data/tuh/tuep"
+  edf_path: "/home/taotl/Desktop/TUAR/v3.0.1/edf"
+  num_workers: 0
+  sample_rate: 200
+  window_sec: 10.0
+  stride_sec: 5.0
