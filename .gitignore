@@ -1,5 +1,8 @@
-# Model checkpoints
+# Run outputs
 experiments/
+# Track checkpoints explicitly
+!checkpoints/
+!checkpoints/*.pth
 **/__pycache__/
 *.pyc
 *.pyo

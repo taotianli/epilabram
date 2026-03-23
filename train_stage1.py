@@ -28,6 +28,8 @@ def parse_args():
     parser.add_argument('--config', type=str, default='configs/stage1_dacp.yaml')
     parser.add_argument('--output_dir', type=str, default='experiments/stage1')
     parser.add_argument('--pretrained_path', type=str, default=None)
+    parser.add_argument('--labram_root', type=str, default=None,
+                        help='原始LaBraM代码根目录（含modeling_vqnsp.py），也可用环境变量LABRAM_ROOT')
     parser.add_argument('--resume', type=str, default=None)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--wandb', action='store_true')
@@ -113,6 +115,8 @@ def main():
     model = build_epilabram(
         backbone_size=cfg['model'].get('backbone_size', 'base'),
         pretrained_path=cfg['model'].get('pretrained_path'),
+        vqnsp_path=cfg['model'].get('vqnsp_path'),
+        labram_root=args.labram_root or cfg['model'].get('labram_root'),
         n_prompt=cfg.get('model', {}).get('n_prompt_tokens', 10),
     ).to(device)
 

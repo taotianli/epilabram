@@ -136,7 +136,7 @@ class Stage1Trainer:
             combined,
             batch_size=self.cfg.get('batch_size', 512),
             sampler=sampler,
-            num_workers=0,   # scipy/numpy 在 fork worker 里不安全，用主进程加载
+            num_workers=self.cfg.get('num_workers', 4),
             pin_memory=True,
             drop_last=True,
         )

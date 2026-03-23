@@ -121,10 +121,11 @@ class EpiLaBraM(nn.Module):
         cls = self.backbone.cls_token.expand(B, -1, -1)
         x = torch.cat([cls, x], dim=1)              # (B, 1+N*A, D)
 
-        pos = self.backbone.spatial_embed(N, A, batch_size=B, input_chans=input_chans)
-        x = x + pos
-        te = self.backbone.temporal_embed(x, N, A)
-        x[:, 1:] = x[:, 1:] + te
+        if not self.backbone.use_rope:
+            pos = self.backbone.spatial_embed(N, A, batch_size=B, input_chans=input_chans)
+            x = x + pos
+            te = self.backbone.temporal_embed(x, N, A)
+            x[:, 1:] = x[:, 1:] + te
         x = self.backbone.pos_drop(x)
 
         # 2. 拼接 task prompt tokens
@@ -213,6 +214,7 @@ def build_epilabram(
     backbone_size: str = 'base',
     pretrained_path: Optional[str] = None,
     vqnsp_path: Optional[str] = None,
+    labram_root: Optional[str] = None,
     n_prompt: int = 10,
     adapter_bottleneck_ratio: int = 4,
     n_embed: int = 8192,
@@ -220,14 +222,19 @@ def build_epilabram(
     task_mode: str = 'default',
     n_classes: int = 5,
 ) -> EpiLaBraM:
-    """工厂函数：构建完整 EpiLaBraM 模型"""
+    """工厂函数：构建完整 EpiLaBraM 模型
+
+    Args:
+        labram_root: 原始 LaBraM 代码根目录（含 modeling_vqnsp.py）。
+                     可省略，改用环境变量 LABRAM_ROOT。
+    """
     backbone = LaBraMBackbone(size=backbone_size)
     if pretrained_path:
         backbone.load_pretrained(pretrained_path)
 
     tokenizer = NeuralTokenizer(backbone, n_embed=n_embed, embed_dim=codebook_dim)
     if vqnsp_path:
-        tokenizer.load_pretrained_vqnsp(vqnsp_path)
+        tokenizer.load_pretrained_vqnsp(vqnsp_path, labram_root=labram_root)
 
     embed_dim = backbone.embed_dim
     task_prompts = TaskPromptTokens(n_tasks=4, n_prompt=n_prompt, embed_dim=embed_dim)

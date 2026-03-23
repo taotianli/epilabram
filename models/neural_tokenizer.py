@@ -328,13 +328,27 @@ class NeuralTokenizer(nn.Module):
         # 预训练 VQNSP encoder（冻结）
         self._vqnsp_encoder: Optional[VQNSPEncoder] = None
 
-    def load_pretrained_vqnsp(self, ckpt_path: str):
+    def load_pretrained_vqnsp(self, ckpt_path: str, labram_root: str = None):
         """
         用原始 LaBraM 的 create_model 加载 vqnsp.pth，完全避免结构匹配问题。
         加载后冻结，只用于推理生成 codebook indices。
+
+        Args:
+            ckpt_path:   vqnsp.pth 路径
+            labram_root: 原始 LaBraM 代码根目录（含 modeling_vqnsp.py）。
+                         优先级：参数 > 环境变量 LABRAM_ROOT。
         """
         import sys
-        _labram = '/home/taotl/Desktop/LaBraM'
+        import os
+        _labram = labram_root or os.environ.get('LABRAM_ROOT', '')
+        if not _labram or not os.path.isdir(_labram):
+            raise RuntimeError(
+                "找不到原始 LaBraM 代码目录（需要其中的 modeling_vqnsp.py）。\n"
+                "请通过以下任一方式指定：\n"
+                "  1. 环境变量：export LABRAM_ROOT=/path/to/LaBraM\n"
+                "  2. 代码参数：tokenizer.load_pretrained_vqnsp(ckpt_path, labram_root=...)\n"
+                f"当前值：labram_root={labram_root!r}, LABRAM_ROOT={os.environ.get('LABRAM_ROOT')!r}"
+            )
         if _labram not in sys.path:
             sys.path.insert(0, _labram)
 

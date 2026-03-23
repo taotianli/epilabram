@@ -11,9 +11,9 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from models.epilabram_extended import build_epilabram_extended
-from training.losses import PADMLoss
-from training.masking import PathologyAwareMasking
-from data.tuar_edf_dataset import TUARDataset
+from training.losses import MaskedEEGModelingLoss
+from training.masking import PathologyAwareDynamicMasking
+from data.tuar_edf_dataset import TUAREDFDataset
 from utils.logger import setup_logger
 from utils.checkpoint import save_checkpoint, load_checkpoint
 from utils.seed import set_seed
@@ -100,6 +100,15 @@ def build_scheduler(optimizer, args, steps_per_epoch):
     return scheduler
 
 
+def _prepare_eeg(batch, device, patch_size):
+    """将 dataset 返回的 (eeg, label) 整理为 (B, C, A, patch_size) 格式"""
+    eeg = batch[0].to(device)          # (B, C, T)
+    B, C, T = eeg.shape
+    A = T // patch_size
+    eeg = eeg[:, :, :A * patch_size].reshape(B, C, A, patch_size)
+    return eeg
+
+
 def train_epoch(model, dataloader, optimizer, scheduler, criterion, masking, device, epoch, args):
     """Train for one epoch"""
     model.train()
@@ -111,26 +120,21 @@ def train_epoch(model, dataloader, optimizer, scheduler, criterion, masking, dev
     pbar = tqdm(dataloader, desc=f'Epoch {epoch}')
 
     for batch in pbar:
-        eeg = batch['eeg'].to(device)  # (B, N, A, T)
-        pathology_mask = batch.get('pathology_mask', None)
-        if pathology_mask is not None:
-            pathology_mask = pathology_mask.to(device)
+        eeg = _prepare_eeg(batch, device, args.patch_size)   # (B, C, A, T)
+        B, C, A, T = eeg.shape
 
-        B, N, A, T = eeg.shape
-
-        # Generate masks
-        mask, sym_mask = masking.generate_masks(
-            B, N, A,
-            pathology_mask=pathology_mask,
-            device=device
-        )
+        # Generate masks via PADM (expects (B, C, A*T))
+        eeg_3d = eeg.reshape(B, C, A * T).cpu()
+        mask, sym_mask = masking(eeg_3d, patch_size=T)       # (B, C*A)
+        mask = mask.to(device)
+        sym_mask = sym_mask.to(device)
 
         # Forward
         logits, sym_logits = model.forward_stage1(eeg, mask, sym_mask)
 
         # Get targets from tokenizer
         with torch.no_grad():
-            targets = model.tokenizer.encode(eeg)  # (B, N*A)
+            targets = model.tokenizer.get_codebook_indices(eeg)  # (B, C*A)
 
         # Compute loss
         loss, metrics = criterion(logits, sym_logits, targets, mask, sym_mask)
@@ -145,25 +149,20 @@ def train_epoch(model, dataloader, optimizer, scheduler, criterion, masking, dev
         optimizer.step()
         scheduler.step()
 
-        # Metrics
         total_loss += loss.item()
-        total_acc += metrics['accuracy']
+        total_acc += metrics['metric/mask_acc'].item()
         num_batches += 1
 
-        # Update progress bar
         pbar.set_postfix({
             'loss': f'{loss.item():.4f}',
-            'acc': f'{metrics["accuracy"]:.4f}',
+            'acc': f'{metrics["metric/mask_acc"].item():.4f}',
             'lr': f'{scheduler.get_last_lr()[0]:.6f}'
         })
 
-    avg_loss = total_loss / num_batches
-    avg_acc = total_acc / num_batches
-
-    return avg_loss, avg_acc
+    return total_loss / max(num_batches, 1), total_acc / max(num_batches, 1)
 
 
-def validate(model, dataloader, criterion, masking, device):
+def validate(model, dataloader, criterion, masking, device, patch_size):
     """Validate the model"""
     model.eval()
 
@@ -173,37 +172,24 @@ def validate(model, dataloader, criterion, masking, device):
 
     with torch.no_grad():
         for batch in tqdm(dataloader, desc='Validation'):
-            eeg = batch['eeg'].to(device)
-            pathology_mask = batch.get('pathology_mask', None)
-            if pathology_mask is not None:
-                pathology_mask = pathology_mask.to(device)
+            eeg = _prepare_eeg(batch, device, patch_size)    # (B, C, A, T)
+            B, C, A, T = eeg.shape
 
-            B, N, A, T = eeg.shape
+            eeg_3d = eeg.reshape(B, C, A * T).cpu()
+            mask, sym_mask = masking(eeg_3d, patch_size=T)
+            mask = mask.to(device)
+            sym_mask = sym_mask.to(device)
 
-            # Generate masks
-            mask, sym_mask = masking.generate_masks(
-                B, N, A,
-                pathology_mask=pathology_mask,
-                device=device
-            )
-
-            # Forward
             logits, sym_logits = model.forward_stage1(eeg, mask, sym_mask)
+            targets = model.tokenizer.get_codebook_indices(eeg)
 
-            # Get targets
-            targets = model.tokenizer.encode(eeg)
-
-            # Compute loss
             loss, metrics = criterion(logits, sym_logits, targets, mask, sym_mask)
 
             total_loss += loss.item()
-            total_acc += metrics['accuracy']
+            total_acc += metrics['metric/mask_acc'].item()
             num_batches += 1
 
-    avg_loss = total_loss / num_batches
-    avg_acc = total_acc / num_batches
-
-    return avg_loss, avg_acc
+    return total_loss / max(num_batches, 1), total_acc / max(num_batches, 1)
 
 
 def main():
@@ -247,20 +233,19 @@ def main():
 
     # Build datasets
     logger.info("Loading datasets...")
-    train_dataset = TUARDataset(
-        data_dir=args.data_dir,
+    window_sec = args.time_patches * args.patch_size / 200.0  # patches * patch_size / sample_rate
+    train_dataset = TUAREDFDataset(
+        edf_root=args.data_dir,
+        window_sec=window_sec,
+        stride_sec=window_sec / 2,
         split='train',
-        n_channels=args.n_channels,
-        time_patches=args.time_patches,
-        patch_size=args.patch_size,
     )
 
-    val_dataset = TUARDataset(
-        data_dir=args.data_dir,
-        split='val',
-        n_channels=args.n_channels,
-        time_patches=args.time_patches,
-        patch_size=args.patch_size,
+    val_dataset = TUAREDFDataset(
+        edf_root=args.data_dir,
+        window_sec=window_sec,
+        stride_sec=window_sec / 2,
+        split='eval',
     )
 
     train_loader = DataLoader(
@@ -287,14 +272,11 @@ def main():
     scheduler = build_scheduler(optimizer, args, len(train_loader))
 
     # Build loss and masking
-    criterion = PADMLoss(
-        n_embed=model.tokenizer.codebook.n_embed,
-        symmetric_weight=0.5,
-    )
+    criterion = MaskedEEGModelingLoss()
 
-    masking = PathologyAwareMasking(
-        mask_ratio=args.mask_ratio,
-        pathology_boost=args.pathology_boost,
+    masking = PathologyAwareDynamicMasking(
+        sample_rate=200.0,
+        base_mask_ratio=args.mask_ratio,
     )
 
     # Resume from checkpoint
@@ -303,12 +285,7 @@ def main():
 
     if args.resume:
         logger.info(f"Resuming from {args.resume}")
-        checkpoint = load_checkpoint(args.resume)
-        model.load_state_dict(checkpoint['model'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        scheduler.load_state_dict(checkpoint['scheduler'])
-        start_epoch = checkpoint['epoch'] + 1
-        best_val_loss = checkpoint.get('best_val_loss', float('inf'))
+        start_epoch = load_checkpoint(args.resume, model, optimizer)
 
     # Training loop
     logger.info("Starting training...")
@@ -325,7 +302,7 @@ def main():
         logger.info(f"Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
 
         # Validate
-        val_loss, val_acc = validate(model, val_loader, criterion, masking, device)
+        val_loss, val_acc = validate(model, val_loader, criterion, masking, device, args.patch_size)
         logger.info(f"Val Loss: {val_loss:.4f}, Val Acc: {val_acc:.4f}")
 
         # Save checkpoint
@@ -334,24 +311,13 @@ def main():
             best_val_loss = val_loss
 
         if (epoch + 1) % args.save_freq == 0 or is_best:
-            checkpoint = {
-                'epoch': epoch,
-                'model': model.state_dict(),
-                'optimizer': optimizer.state_dict(),
-                'scheduler': scheduler.state_dict(),
-                'train_loss': train_loss,
-                'val_loss': val_loss,
-                'best_val_loss': best_val_loss,
-                'args': args,
-            }
-
             save_path = os.path.join(args.output_dir, f'checkpoint_epoch_{epoch}.pth')
-            save_checkpoint(checkpoint, save_path)
+            save_checkpoint(save_path, model, optimizer, None, epoch)
             logger.info(f"Saved checkpoint to {save_path}")
 
             if is_best:
                 best_path = os.path.join(args.output_dir, 'best_model.pth')
-                save_checkpoint(checkpoint, best_path)
+                save_checkpoint(best_path, model, optimizer, None, epoch)
                 logger.info(f"Saved best model to {best_path}")
 
     logger.info("Training completed!")
