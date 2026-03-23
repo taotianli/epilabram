@@ -37,12 +37,14 @@ training:
   gradient_clip: 3.0
 
 data:
-  tuab_path: "data/tuh/tuab"
-  tusz_path: "data/tuh/tusz"
-  tuev_path: "data/tuh/tuev"
-  tuep_path: "data/tuh/tuep"
-  edf_path: "/home/taotl/Desktop/TUAR/v3.0.1/edf"
-  num_workers: 0
+  # 集群路径：预处理后的 h5 数据目录
+  tuab_path: "/projects/u6da/tuh_processed/tuab"
+  tusz_path: "/projects/u6da/tuh_processed/tusz"
+  tuev_path: "/projects/u6da/tuh_processed/tuev"
+  tuep_path: "/projects/u6da/tuh_processed/tuep"
+  # TUAR EDF 原始路径（Stage1 直接读取）
+  edf_path: "/projects/u6da/tuh_eeg/tuar/edf"
+  num_workers: 8
   sample_rate: 200
   window_sec: 10.0
   stride_sec: 5.0
