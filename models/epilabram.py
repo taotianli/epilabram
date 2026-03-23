@@ -225,8 +225,7 @@ def build_epilabram(
     """工厂函数：构建完整 EpiLaBraM 模型
 
     Args:
-        labram_root: 原始 LaBraM 代码根目录（含 modeling_vqnsp.py）。
-                     可省略，改用环境变量 LABRAM_ROOT。
+        labram_root: 已废弃，不再需要，保留仅为向后兼容。
     """
     backbone = LaBraMBackbone(size=backbone_size)
     if pretrained_path:

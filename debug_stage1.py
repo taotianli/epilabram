@@ -14,14 +14,17 @@ from utils.seed import set_seed
 set_seed(42)
 device = torch.device('cuda')
 
+import os as _os
+_edf_path = _os.environ.get('EDF_PATH', 'data/tuar/edf')
 print('[1] loading full dataset...')
-ds = TUAREDFDataset('/home/taotl/Desktop/TUAR/v3.0.1/edf', window_sec=10.0, stride_sec=5.0)
+ds = TUAREDFDataset(_edf_path, window_sec=10.0, stride_sec=5.0)
 print(f'    ok: {len(ds)} segments')
 
 print('[2] building model...')
 model = build_epilabram(
     'base',
-    pretrained_path='/home/taotl/Desktop/LaBraM/checkpoints/labram-base.pth'
+    pretrained_path=_os.environ.get('PRETRAINED_PATH', 'checkpoints/labram-base.pth'),
+    vqnsp_path=_os.environ.get('VQNSP_PATH', 'checkpoints/vqnsp.pth'),
 ).to(device)
 print(f'    ok: {sum(p.numel() for p in model.parameters())/1e6:.1f}M params')
 

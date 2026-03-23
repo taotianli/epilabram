@@ -48,7 +48,7 @@ try:
     device = torch.device('cuda')
     model = build_epilabram(
         backbone_size='base',
-        vqnsp_path='/home/taotl/Desktop/LaBraM/checkpoints/vqnsp.pth',
+        vqnsp_path=cfg['model'].get('vqnsp_path', 'checkpoints/vqnsp.pth'),
         task_mode='artifact',
         n_classes=5,
     ).to(device)

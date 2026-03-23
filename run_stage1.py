@@ -44,8 +44,8 @@ try:
     device = torch.device('cuda')
     model = build_epilabram(
         backbone_size='base',
-        pretrained_path='/home/taotl/Desktop/LaBraM/checkpoints/labram-base.pth',
-        vqnsp_path='/home/taotl/Desktop/LaBraM/checkpoints/vqnsp.pth',
+        pretrained_path=cfg['model'].get('pretrained_path', 'checkpoints/labram-base.pth'),
+        vqnsp_path=cfg['model'].get('vqnsp_path', 'checkpoints/vqnsp.pth'),
     ).to(device)
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
     log(f'    params={n_params:.1f}M')
@@ -60,8 +60,9 @@ try:
     assert unique > 10, f'Codebook collapse detected! unique={unique}'
 
     log('[4] dataset')
+    edf_path = cfg.get('data', {}).get('edf_path', 'data/tuar/edf')
     ds = TUAREDFDataset(
-        '/home/taotl/Desktop/TUAR/v3.0.1/edf',
+        edf_path,
         window_sec=10.0, stride_sec=5.0,
     )
     log(f'    {len(ds)} segments')

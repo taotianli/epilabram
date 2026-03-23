@@ -330,57 +330,16 @@ class NeuralTokenizer(nn.Module):
 
     def load_pretrained_vqnsp(self, ckpt_path: str, labram_root: str = None):
         """
-        用原始 LaBraM 的 create_model 加载 vqnsp.pth，完全避免结构匹配问题。
-        加载后冻结，只用于推理生成 codebook indices。
-
-        Args:
-            ckpt_path:   vqnsp.pth 路径
-            labram_root: 原始 LaBraM 代码根目录（含 modeling_vqnsp.py）。
-                         优先级：参数 > 环境变量 LABRAM_ROOT。
+        从 vqnsp.pth 加载预训练 tokenizer，完全使用内置 VQNSPEncoder，
+        不依赖原始 LaBraM 代码目录。labram_root 参数保留但不再使用。
         """
-        import sys
-        import os
-        _labram = labram_root or os.environ.get('LABRAM_ROOT', '')
-        if not _labram or not os.path.isdir(_labram):
-            raise RuntimeError(
-                "找不到原始 LaBraM 代码目录（需要其中的 modeling_vqnsp.py）。\n"
-                "请通过以下任一方式指定：\n"
-                "  1. 环境变量：export LABRAM_ROOT=/path/to/LaBraM\n"
-                "  2. 代码参数：tokenizer.load_pretrained_vqnsp(ckpt_path, labram_root=...)\n"
-                f"当前值：labram_root={labram_root!r}, LABRAM_ROOT={os.environ.get('LABRAM_ROOT')!r}"
-            )
-        if _labram not in sys.path:
-            sys.path.insert(0, _labram)
-
-        # monkey-patch torch.load 以兼容 PyTorch 2.6+ 的 weights_only 默认值变化
-        import torch as _torch
-        _orig_load = _torch.load
-        def _patched_load(*args, **kwargs):
-            kwargs.setdefault('weights_only', False)
-            return _orig_load(*args, **kwargs)
-        _torch.load = _patched_load
-
-        try:
-            from timm.models import create_model
-            import modeling_vqnsp  # noqa: registers the model
-
-            vqnsp = create_model(
-                'vqnsp_encoder_base_decoder_3x200x12',
-                pretrained=True,
-                pretrained_weight=ckpt_path,
-                as_tokenzer=True,
-                n_code=8192,
-                code_dim=64,
-            ).eval()
-        finally:
-            _torch.load = _orig_load
-            if _labram in sys.path:
-                sys.path.remove(_labram)
-
-        for p in vqnsp.parameters():
+        enc = VQNSPEncoder()
+        enc.load_vqnsp(ckpt_path)
+        enc.eval()
+        for p in enc.parameters():
             p.requires_grad_(False)
 
-        self._vqnsp_encoder = vqnsp
+        self._vqnsp_encoder = enc
         print(f'[NeuralTokenizer] VQNSP loaded and frozen from {ckpt_path}')
 
     @torch.no_grad()
@@ -395,13 +354,7 @@ class NeuralTokenizer(nn.Module):
         if self._vqnsp_encoder is not None:
             device = x.device
             enc = self._vqnsp_encoder.to(device)
-
-            # 构建 input_chans 索引（对应 LaBraM standard_1020 列表）
-            if input_chans is None:
-                input_chans = _get_standard_input_chans(device)
-
-            _, indices, _ = enc.encode(x, input_chans=input_chans)
-            return indices.reshape(x.shape[0], -1)
+            return enc(x)   # VQNSPEncoder.forward() 直接返回 (B, N*A) indices
 
         # fallback（不推荐，会 collapse）
         features = self.backbone(x, input_chans, return_patch_tokens=True)

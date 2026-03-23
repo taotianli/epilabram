@@ -1,6 +1,7 @@
 model:
   backbone_size: "base"
   pretrained_path: "checkpoints/labram-base.pth"
+  vqnsp_path: "checkpoints/vqnsp.pth"
   patch_window: 200
   max_patches: 256
   hidden_size: 200

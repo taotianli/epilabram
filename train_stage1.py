@@ -29,7 +29,7 @@ def parse_args():
     parser.add_argument('--output_dir', type=str, default='experiments/stage1')
     parser.add_argument('--pretrained_path', type=str, default=None)
     parser.add_argument('--labram_root', type=str, default=None,
-                        help='原始LaBraM代码根目录（含modeling_vqnsp.py），也可用环境变量LABRAM_ROOT')
+                        help='已废弃，不再需要，保留为向后兼容')
     parser.add_argument('--resume', type=str, default=None)
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--wandb', action='store_true')

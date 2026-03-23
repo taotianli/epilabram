@@ -25,9 +25,10 @@ def main():
     device = torch.device('cuda')
 
     print('[1] loading model...')
+    vqnsp_path = os.environ.get('VQNSP_PATH', 'checkpoints/vqnsp.pth')
     model = build_epilabram(
         backbone_size='base',
-        vqnsp_path='/home/taotl/Desktop/LaBraM/checkpoints/vqnsp.pth',
+        vqnsp_path=vqnsp_path,
         task_mode='artifact',
         n_classes=5,
     ).to(device)
@@ -41,8 +42,9 @@ def main():
 
     print('[2] loading dataset (eval split, stride=10s)...')
     # 用 stride=10s（不重叠）做评估，避免数据泄露
+    edf_path = os.environ.get('EDF_PATH', 'data/tuar/edf')
     ds = TUAREDFDataset(
-        '/home/taotl/Desktop/TUAR/v3.0.1/edf',
+        edf_path,
         window_sec=10.0,
         stride_sec=10.0,
         mode='artifact',
