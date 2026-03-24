@@ -12,6 +12,7 @@
 
 import os
 import argparse
+import time
 import numpy as np
 from tqdm.auto import tqdm
 
@@ -43,11 +44,12 @@ def build_split(ds_cls, data_path, split, out_dir, num_workers=16):
     lbl_path = os.path.join(out_dir, f'{split}_labels.npy')
 
     if os.path.exists(eeg_path) and os.path.exists(lbl_path):
-        print(f'  [{split}] 已存在，跳过')
+        size_gb = os.path.getsize(eeg_path) / 1e9
+        print(f'  [{split}] 已存在 ({size_gb:.1f} GB)，跳过')
         return
 
-    print(f'  [{split}] N={N}  shape=({N},{C},{T})  '
-          f'size≈{N*C*T*2/1e9:.1f}GB(fp16)')
+    size_gb = N * C * T * 2 / 1e9
+    print(f'  [{split}] 样本数={N:,}  通道={C}  采样点={T}  预计大小={size_gb:.1f} GB (fp16)')
 
     eeg_mm  = np.memmap(eeg_path, dtype='float16', mode='w+', shape=(N, C, T))
     lbl_mm  = np.memmap(lbl_path, dtype='int32',   mode='w+', shape=(N,))
@@ -57,18 +59,22 @@ def build_split(ds_cls, data_path, split, out_dir, num_workers=16):
                         persistent_workers=(num_workers > 0),
                         prefetch_factor=4 if num_workers > 0 else None)
 
+    t0  = time.time()
     idx = 0
-    for batch in tqdm(loader, desc=f'    写入 {split}', unit='batch'):
-        eeg   = batch[0].numpy().astype('float16')   # (B, C, T)
+    for batch in tqdm(loader, desc=f'  [{split}]', unit='batch',
+                      total=len(loader), dynamic_ncols=True):
+        eeg   = batch[0].numpy().astype('float16')
         label = batch[1].numpy().astype('int32')
         b = eeg.shape[0]
-        eeg_mm[idx:idx+b]  = eeg
-        lbl_mm[idx:idx+b]  = label
+        eeg_mm[idx:idx+b] = eeg
+        lbl_mm[idx:idx+b] = label
         idx += b
 
     eeg_mm.flush()
     lbl_mm.flush()
-    print(f'  [{split}] 完成 → {out_dir}')
+    elapsed = time.time() - t0
+    print(f'  [{split}] 完成  耗时={elapsed/60:.1f}min  '
+          f'实际大小={os.path.getsize(eeg_path)/1e9:.1f}GB  → {out_dir}')
 
 
 def main():
