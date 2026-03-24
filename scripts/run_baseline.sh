@@ -3,7 +3,7 @@
 #SBATCH --output=/projects/u6da/logs/baseline_%j.log
 #SBATCH --error=/projects/u6da/logs/baseline_%j.err
 #SBATCH --gpus=1
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=72
 #SBATCH --mem=120G
 #SBATCH --time=04:00:00
 
@@ -30,7 +30,7 @@ python eval_labram_baseline.py \
     --epochs       10 \
     --batch_size   2048 \
     --lr           1e-3 \
-    --num_workers  16 \
+    --num_workers  32 \
     --bf16 \
     --compile \
     --output_dir   experiments/labram_baseline

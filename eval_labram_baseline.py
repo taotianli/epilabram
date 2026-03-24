@@ -86,8 +86,16 @@ def get_dataloader(task: str, split: str, batch_size: int, num_workers: int,
     cfg = TASK_CONFIGS[task]
     ds = cfg['ds_cls'](data_path, split=split, window_sec=10.0, stride_sec=10.0)
     shuffle = (split == 'train')
-    return DataLoader(ds, batch_size=batch_size, shuffle=shuffle,
-                      num_workers=num_workers, pin_memory=True, drop_last=False)
+    return DataLoader(
+        ds,
+        batch_size=batch_size,
+        shuffle=shuffle,
+        num_workers=num_workers,
+        pin_memory=True,
+        drop_last=False,
+        persistent_workers=(num_workers > 0),  # worker 进程跨 epoch 复用，避免重启开销
+        prefetch_factor=4 if num_workers > 0 else None,  # 提前预取 batch，掩盖 IO 延迟
+    )
 
 
 def extract_eeg_label(batch, task: str):

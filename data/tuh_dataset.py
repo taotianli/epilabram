@@ -16,6 +16,16 @@ import h5py
 
 from data.preprocessing import EEGPreprocessor, STANDARD_CHANNELS
 
+# 进程级 h5 文件句柄缓存：每个 DataLoader worker 进程独立持有，
+# 避免 __getitem__ 每次都重新打开/关闭文件（最大 IO 瓶颈）。
+_h5_cache: Dict[str, h5py.File] = {}
+
+
+def _get_h5(h5_path: str) -> h5py.File:
+    if h5_path not in _h5_cache:
+        _h5_cache[h5_path] = h5py.File(h5_path, 'r')
+    return _h5_cache[h5_path]
+
 TASK_IDS = {'TUAB': 0, 'TUSZ': 1, 'TUEV': 2, 'TUEP': 3}
 TUEV_LABELS = {'SPSW': 0, 'GPED': 1, 'PLED': 2, 'EYEM': 3, 'ARTF': 4, 'BCKG': 5}
 TUSZ_SEIZURE_TYPES = ['FNSZ', 'GNSZ', 'ABSZ', 'TNSZ', 'CPSZ', 'TCSZ', 'MYSZ']
@@ -45,13 +55,13 @@ def _build_index(h5_path: str, window_size: int, stride: int):
 
 
 def _read_seg(h5_path: str, subj_key: str, idx: int, window_size: int) -> np.ndarray:
-    """从 h5 文件读取单个片段"""
-    with h5py.File(h5_path, 'r') as f:
-        eeg = f[subj_key]['eeg']
-        if eeg.ndim == 3:
-            return np.array(eeg[idx])                        # (C, T)
-        else:
-            return np.array(eeg[:, idx:idx + window_size])   # (C, T)
+    """从 h5 文件读取单个片段（复用进程级缓存句柄，避免重复开关文件）"""
+    f = _get_h5(h5_path)
+    eeg = f[subj_key]['eeg']
+    if eeg.ndim == 3:
+        return np.array(eeg[idx])                        # (C, T)
+    else:
+        return np.array(eeg[:, idx:idx + window_size])   # (C, T)
 
 
 # ============================================================
