@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from models.labram_backbone import LaBraMBackbone
 from data.tuh_dataset import TUABDataset, TUSZDataset, TUEVDataset, TUEPDataset
+from torch.utils.data import TensorDataset
 
 # ============================================================
 # 配置
@@ -68,8 +69,11 @@ class LaBraMClassifier(nn.Module):
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        x: (B, 23, T) → 自动 reshape 成 (B, 23, A, 200)
+        x: (B, embed_dim) 预提取特征，或 (B, 23, T) 原始 EEG
         """
+        if x.ndim == 2:
+            # 预提取特征模式：直接过分类头
+            return self.head(x)
         if x.ndim == 3:
             B, N, T = x.shape
             A = T // 200
@@ -82,7 +86,19 @@ class LaBraMClassifier(nn.Module):
 # 数据加载工具
 # ============================================================
 def get_dataloader(task: str, split: str, batch_size: int, num_workers: int,
-                   data_path: str) -> DataLoader:
+                   data_path: str, feat_dir: str = 'features') -> DataLoader:
+    # 预提取特征存在时直接走 TensorDataset，IO 不再是瓶颈
+    feat_path  = os.path.join(feat_dir, task, f'{split}_feats.npy')
+    label_path = os.path.join(feat_dir, task, f'{split}_labels.npy')
+    if os.path.exists(feat_path) and os.path.exists(label_path):
+        feats  = torch.from_numpy(np.load(feat_path))
+        labels = torch.from_numpy(np.load(label_path)).long()
+        ds = TensorDataset(feats, labels)
+        shuffle = (split == 'train')
+        return DataLoader(ds, batch_size=batch_size, shuffle=shuffle,
+                          num_workers=0, pin_memory=True, drop_last=False)
+
+    # 未预提取时回退到原始 h5 懒加载
     cfg = TASK_CONFIGS[task]
     ds = cfg['ds_cls'](data_path, split=split, window_sec=10.0, stride_sec=10.0)
     shuffle = (split == 'train')
@@ -93,8 +109,8 @@ def get_dataloader(task: str, split: str, batch_size: int, num_workers: int,
         num_workers=num_workers,
         pin_memory=True,
         drop_last=False,
-        persistent_workers=(num_workers > 0),  # worker 进程跨 epoch 复用，避免重启开销
-        prefetch_factor=4 if num_workers > 0 else None,  # 提前预取 batch，掩盖 IO 延迟
+        persistent_workers=(num_workers > 0),
+        prefetch_factor=4 if num_workers > 0 else None,
     )
 
 
@@ -225,8 +241,8 @@ def run_task(task: str, args, device: torch.device) -> dict:
         model = torch.compile(model, mode='max-autotune')
 
     # ---- 数据 ----
-    train_loader = get_dataloader(task, 'train', args.batch_size, args.num_workers, path)
-    eval_loader  = get_dataloader(task, 'eval',  args.batch_size, args.num_workers, path)
+    train_loader = get_dataloader(task, 'train', args.batch_size, args.num_workers, path, args.feat_dir)
+    eval_loader  = get_dataloader(task, 'eval',  args.batch_size, args.num_workers, path, args.feat_dir)
     print(f"  train={len(train_loader.dataset)}  eval={len(eval_loader.dataset)}")
 
     # ---- 训练 ----
@@ -280,6 +296,8 @@ def main():
     parser.add_argument('--compile',       action='store_true', default=False,
                         help='torch.compile 加速（首次运行较慢，后续更快）')
     parser.add_argument('--output_dir',    type=str, default='experiments/labram_baseline')
+    parser.add_argument('--feat_dir',      type=str, default='features',
+                        help='预提取特征目录（由 extract_features.py 生成）')
     # 可逐个覆盖数据路径
     parser.add_argument('--tuab_path', type=str, default=None)
     parser.add_argument('--tusz_path', type=str, default=None)
