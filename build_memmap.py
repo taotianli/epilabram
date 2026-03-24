@@ -11,6 +11,7 @@
 """
 
 import os
+import json
 import argparse
 import time
 import numpy as np
@@ -72,6 +73,12 @@ def build_split(ds_cls, data_path, split, out_dir, num_workers=16):
 
     eeg_mm.flush()
     lbl_mm.flush()
+
+    # 保存 shape 元信息，供 MemmapEEGDataset 用 np.memmap 正确读取
+    meta = {'N': N, 'C': C, 'T': T, 'eeg_dtype': 'float16', 'lbl_dtype': 'int32'}
+    with open(os.path.join(out_dir, f'{split}_meta.json'), 'w') as f:
+        json.dump(meta, f)
+
     elapsed = time.time() - t0
     print(f'  [{split}] 完成  耗时={elapsed/60:.1f}min  '
           f'实际大小={os.path.getsize(eeg_path)/1e9:.1f}GB  → {out_dir}')
