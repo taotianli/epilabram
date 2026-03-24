@@ -31,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from models.labram_backbone import LaBraMBackbone
 from data.tuh_dataset import TUABDataset, TUSZDataset, TUEVDataset, TUEPDataset
+from data.memmap_dataset import MemmapEEGDataset
 from torch.utils.data import TensorDataset
 
 # ============================================================
@@ -86,22 +87,35 @@ class LaBraMClassifier(nn.Module):
 # 数据加载工具
 # ============================================================
 def get_dataloader(task: str, split: str, batch_size: int, num_workers: int,
-                   data_path: str, feat_dir: str = 'features') -> DataLoader:
-    # 预提取特征存在时直接走 TensorDataset，IO 不再是瓶颈
+                   data_path: str, feat_dir: str = 'features',
+                   memmap_dir: str = 'memmap') -> DataLoader:
+    shuffle = (split == 'train')
+
+    # 优先级 1：预提取 backbone 特征（线性探针最快，不经过 backbone）
     feat_path  = os.path.join(feat_dir, task, f'{split}_feats.npy')
     label_path = os.path.join(feat_dir, task, f'{split}_labels.npy')
     if os.path.exists(feat_path) and os.path.exists(label_path):
         feats  = torch.from_numpy(np.load(feat_path))
         labels = torch.from_numpy(np.load(label_path)).long()
         ds = TensorDataset(feats, labels)
-        shuffle = (split == 'train')
+        print(f'  [dataloader] 使用预提取特征: {feat_path}')
         return DataLoader(ds, batch_size=batch_size, shuffle=shuffle,
                           num_workers=0, pin_memory=True, drop_last=False)
 
-    # 未预提取时回退到原始 h5 懒加载
+    # 优先级 2：memmap（全量微调 / RoPE 等需要原始 EEG 的场景）
+    if MemmapEEGDataset.exists(task, split, memmap_dir):
+        ds = MemmapEEGDataset(task, split, memmap_dir)
+        print(f'  [dataloader] 使用 memmap: {memmap_dir}/{task}')
+        return DataLoader(ds, batch_size=batch_size, shuffle=shuffle,
+                          num_workers=num_workers, pin_memory=True,
+                          drop_last=False,
+                          persistent_workers=(num_workers > 0),
+                          prefetch_factor=4 if num_workers > 0 else None)
+
+    # 优先级 3：原始 h5 懒加载（兜底）
+    print(f'  [dataloader] 使用原始 h5: {data_path}')
     cfg = TASK_CONFIGS[task]
     ds = cfg['ds_cls'](data_path, split=split, window_sec=10.0, stride_sec=10.0)
-    shuffle = (split == 'train')
     return DataLoader(
         ds,
         batch_size=batch_size,
@@ -241,8 +255,8 @@ def run_task(task: str, args, device: torch.device) -> dict:
         model = torch.compile(model, mode='max-autotune')
 
     # ---- 数据 ----
-    train_loader = get_dataloader(task, 'train', args.batch_size, args.num_workers, path, args.feat_dir)
-    eval_loader  = get_dataloader(task, 'eval',  args.batch_size, args.num_workers, path, args.feat_dir)
+    train_loader = get_dataloader(task, 'train', args.batch_size, args.num_workers, path, args.feat_dir, args.memmap_dir)
+    eval_loader  = get_dataloader(task, 'eval',  args.batch_size, args.num_workers, path, args.feat_dir, args.memmap_dir)
     print(f"  train={len(train_loader.dataset)}  eval={len(eval_loader.dataset)}")
 
     # ---- 训练 ----
@@ -298,6 +312,8 @@ def main():
     parser.add_argument('--output_dir',    type=str, default='experiments/labram_baseline')
     parser.add_argument('--feat_dir',      type=str, default='features',
                         help='预提取特征目录（由 extract_features.py 生成）')
+    parser.add_argument('--memmap_dir',    type=str, default='memmap',
+                        help='memmap 原始 EEG 目录（由 build_memmap.py 生成）')
     # 可逐个覆盖数据路径
     parser.add_argument('--tuab_path', type=str, default=None)
     parser.add_argument('--tusz_path', type=str, default=None)

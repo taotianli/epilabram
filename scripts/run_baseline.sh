@@ -33,6 +33,7 @@ python eval_labram_baseline.py \
     --num_workers  32 \
     --bf16 \
     --compile \
+    --memmap_dir   /projects/u6da/tuh_processed/memmap \
     --output_dir   experiments/labram_baseline
 
 echo "=========================================="
