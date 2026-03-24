@@ -76,12 +76,18 @@ class TUABDataset(Dataset):
                 try:
                     with h5py.File(h5_path, 'r') as f:
                         for subj_key in f.keys():
-                            eeg = f[subj_key]['eeg'][:]  # (C, T)
+                            eeg = f[subj_key]['eeg'][:]
                             ch_names = list(f[subj_key]['eeg'].attrs.get('chOrder', STANDARD_CHANNELS))
-                            T = eeg.shape[1]
-                            for start in range(0, T - self.window_size + 1, self.stride):
-                                seg = eeg[:, start:start + self.window_size]
-                                self.samples.append((seg, label_id, subject_id, recording_id, ch_names))
+                            if eeg.ndim == 3:
+                                # 预处理存储格式 (N_segments, C, T)
+                                for i in range(eeg.shape[0]):
+                                    self.samples.append((eeg[i], label_id, subject_id, recording_id, ch_names))
+                            else:
+                                # 完整录音格式 (C, T)
+                                T = eeg.shape[1]
+                                for start in range(0, T - self.window_size + 1, self.stride):
+                                    seg = eeg[:, start:start + self.window_size]
+                                    self.samples.append((seg, label_id, subject_id, recording_id, ch_names))
                 except Exception:
                     pass
 
@@ -135,26 +141,33 @@ class TUSZDataset(Dataset):
             try:
                 with h5py.File(h5_path, 'r') as f:
                     for subj_key in f.keys():
-                        eeg = f[subj_key]['eeg'][:]  # (C, T)
+                        eeg = f[subj_key]['eeg'][:]
                         ch_names = list(f[subj_key]['eeg'].attrs.get('chOrder', STANDARD_CHANNELS))
-                        labels_arr = f[subj_key].get('label', None)
-                        if labels_arr is None:
+                        labels_raw = f[subj_key].get('label', None)
+                        if labels_raw is None:
                             continue
-                        labels_arr = labels_arr[:]  # (T,) or (N_events, 3)
-                        T = eeg.shape[1]
-                        for start in range(0, T - self.window_size + 1, self.stride):
-                            seg = eeg[:, start:start + self.window_size]
-                            # 取窗口内多数标签
-                            if labels_arr.ndim == 1:
-                                win_labels = labels_arr[start:start + self.window_size]
-                                label = int(win_labels.mean() >= 0.5)
-                                onset = start / self.sample_rate
+                        labels_arr = labels_raw[:]
+
+                        if eeg.ndim == 3:
+                            # 预处理存储格式 (N_segments, C, T)，labels_arr 为 (N_segments,)
+                            for i in range(eeg.shape[0]):
+                                lbl = int(labels_arr[i]) if labels_arr.ndim == 1 else 0
+                                onset  = i * (self.window_size / self.sample_rate)
+                                offset = onset + self.window_size / self.sample_rate
+                                self.samples.append((eeg[i], lbl, onset, offset, ch_names))
+                        else:
+                            # 完整录音格式 (C, T)
+                            T = eeg.shape[1]
+                            for start in range(0, T - self.window_size + 1, self.stride):
+                                seg = eeg[:, start:start + self.window_size]
+                                if labels_arr.ndim == 1:
+                                    win_labels = labels_arr[start:start + self.window_size]
+                                    lbl = int(win_labels.mean() >= 0.5)
+                                else:
+                                    lbl = 0
+                                onset  = start / self.sample_rate
                                 offset = (start + self.window_size) / self.sample_rate
-                            else:
-                                label = 0
-                                onset = start / self.sample_rate
-                                offset = (start + self.window_size) / self.sample_rate
-                            self.samples.append((seg, label, onset, offset, ch_names))
+                                self.samples.append((seg, lbl, onset, offset, ch_names))
             except Exception:
                 pass
 
@@ -205,10 +218,14 @@ class TUEVDataset(Dataset):
                         for subj_key in f.keys():
                             eeg = f[subj_key]['eeg'][:]
                             ch_names = list(f[subj_key]['eeg'].attrs.get('chOrder', STANDARD_CHANNELS))
-                            T = eeg.shape[1]
-                            for start in range(0, T - self.window_size + 1, self.stride):
-                                seg = eeg[:, start:start + self.window_size]
-                                self.samples.append((seg, label_id, ch_names))
+                            if eeg.ndim == 3:
+                                for i in range(eeg.shape[0]):
+                                    self.samples.append((eeg[i], label_id, ch_names))
+                            else:
+                                T = eeg.shape[1]
+                                for start in range(0, T - self.window_size + 1, self.stride):
+                                    seg = eeg[:, start:start + self.window_size]
+                                    self.samples.append((seg, label_id, ch_names))
                 except Exception:
                     pass
 
@@ -258,10 +275,14 @@ class TUEPDataset(Dataset):
                         for subj_key in f.keys():
                             eeg = f[subj_key]['eeg'][:]
                             ch_names = list(f[subj_key]['eeg'].attrs.get('chOrder', STANDARD_CHANNELS))
-                            T = eeg.shape[1]
-                            for start in range(0, T - self.window_size + 1, self.stride):
-                                seg = eeg[:, start:start + self.window_size]
-                                self.samples.append((seg, label_id, ch_names))
+                            if eeg.ndim == 3:
+                                for i in range(eeg.shape[0]):
+                                    self.samples.append((eeg[i], label_id, ch_names))
+                            else:
+                                T = eeg.shape[1]
+                                for start in range(0, T - self.window_size + 1, self.stride):
+                                    seg = eeg[:, start:start + self.window_size]
+                                    self.samples.append((seg, label_id, ch_names))
                 except Exception:
                     pass
 
