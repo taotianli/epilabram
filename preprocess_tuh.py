@@ -118,7 +118,7 @@ def _worker_tusz(task):
     if os.path.exists(out_path):
         return 'skip', 0, 0
 
-    events = _parse_tusz_tse(tse_path)
+    events = _parse_tusz_annotation(edf_path)
     eeg, ch_names, _ = load_and_preprocess_edf(edf_path)
     if eeg is None:
         return 'error', 0, 0
@@ -160,7 +160,47 @@ def _worker_tusz(task):
 # ============================================================
 # 辅助函数
 # ============================================================
+def _parse_tusz_annotation(edf_path: str):
+    """解析 TUSZ 注释文件，优先 .csv，其次 .tse"""
+    csv_path = edf_path.replace('.edf', '.csv')
+    tse_path = edf_path.replace('.edf', '.tse')
+
+    if os.path.exists(csv_path):
+        return _parse_tusz_csv(csv_path)
+    elif os.path.exists(tse_path):
+        return _parse_tusz_tse(tse_path)
+    return None
+
+
+def _parse_tusz_csv(csv_path: str):
+    """格式：channel,start_time,stop_time,label,confidence（每个事件多行，按通道重复）"""
+    events = []
+    seen = set()
+    try:
+        with open(csv_path) as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith('#') or line.startswith('channel'):
+                    continue
+                parts = line.split(',')
+                if len(parts) < 4:
+                    continue
+                try:
+                    start, stop = float(parts[1]), float(parts[2])
+                    label = parts[3].lower().strip()
+                except (ValueError, IndexError):
+                    continue
+                key = (start, stop, label)
+                if key not in seen:
+                    seen.add(key)
+                    events.append((start, stop, int(label in TUSZ_SEIZURE_LABELS)))
+    except Exception:
+        return None
+    return events or None
+
+
 def _parse_tusz_tse(tse_path: str):
+    """格式：start_time stop_time label（旧版 .tse）"""
     if not os.path.exists(tse_path):
         return None
     events = []
@@ -310,8 +350,7 @@ def process_tusz(tuh_root, output_dir, max_files, num_workers,
         print(f"  [{split}]  {len(files)} files")
 
         tasks = [
-            (f, os.path.join(out_dir, f'{Path(f).stem}.h5'),
-             f.replace('.edf', '.tse'), win, stp)
+            (f, os.path.join(out_dir, f'{Path(f).stem}.h5'), f, win, stp)
             for f in files
         ]
         results = _run_parallel(tasks, _worker_tusz, f'TUSZ {split}', num_workers)

@@ -16,8 +16,7 @@ echo "CPUs:   $SLURM_CPUS_PER_TASK"
 echo "Start:  $(date)"
 echo "=========================================="
 
-source ~/.bashrc
-conda activate epilabram
+source ~/miniforge3/bin/activate epilabram
 
 cd ~/epilabram
 
