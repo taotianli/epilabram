@@ -15,7 +15,6 @@ LaBraM 基准评测：在 TUAB / TUSZ / TUEV / TUEP 上做线性探针评估
 
 import os
 import sys
-import math
 import argparse
 import json
 import numpy as np
@@ -263,55 +262,27 @@ def run_task(task: str, args, device: torch.device) -> dict:
     # ---- 训练 ----
     params = [p for p in model.parameters() if p.requires_grad]
     optimizer = torch.optim.AdamW(params, lr=args.lr, weight_decay=0.05)
-
-    warmup_epochs = getattr(args, 'warmup_epochs', 2)
-    patience      = getattr(args, 'patience', 5)
-
-    def lr_lambda(ep):
-        if ep < warmup_epochs:
-            return (ep + 1) / warmup_epochs
-        progress = (ep - warmup_epochs) / max(args.epochs - warmup_epochs, 1)
-        return 0.5 * (1 + math.cos(math.pi * progress))
-
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, args.epochs)
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    best_auroc      = 0.0
-    best_metrics    = {}
-    best_preds      = best_labels = None
-    best_state_dict = None          # 先在 CPU 内存缓存，只在最终写一次磁盘
-    no_improve      = 0
-    ckpt_path       = os.path.join(args.output_dir, f'best_{task}.pth')
+    best_bal_acc = 0.0
+    best_metrics = {}
+    best_preds = best_labels = None
 
     for ep in range(1, args.epochs + 1):
         loss = train_epoch(model, train_loader, optimizer, criterion, device, task, args.bf16)
         metrics, preds, labels = evaluate(model, eval_loader, device, task, n_cls, args.bf16)
         scheduler.step()
 
-        improved = metrics['auroc'] > best_auroc
-        tag = ' *' if improved else ''
         print(f"  Epoch {ep:2d}/{args.epochs}  loss={loss:.4f}  "
-              f"bal_acc={metrics['bal_acc']:.4f}  auroc={metrics['auroc']:.4f}{tag}")
+              f"bal_acc={metrics['bal_acc']:.4f}  auroc={metrics['auroc']:.4f}")
 
-        if improved:
-            best_auroc      = metrics['auroc']
-            best_metrics    = metrics
-            best_preds      = preds
-            best_labels     = labels
-            no_improve      = 0
-            # 缓存到 CPU 内存，避免每次写网络文件系统（训练结束后统一落盘）
-            best_state_dict = {k: v.cpu().clone() for k, v in model.state_dict().items()}
-        else:
-            no_improve += 1
-            if no_improve >= patience:
-                print(f"  [early stop] {patience} epochs no improvement, stopped at epoch {ep}")
-                break
+        if metrics['bal_acc'] > best_bal_acc:
+            best_bal_acc  = metrics['bal_acc']
+            best_metrics  = metrics
+            best_preds    = preds
+            best_labels   = labels
 
-    # 训练结束后写一次磁盘
-    if best_state_dict is not None:
-        torch.save(best_state_dict, ckpt_path)
-
-    print(f"  Best AUROC: {best_auroc:.4f}  (saved → {ckpt_path})")
     print_task_results(task, best_metrics, best_preds, best_labels, n_cls)
     return best_metrics
 
@@ -326,12 +297,8 @@ def main():
     parser.add_argument('--backbone_size', type=str, default='base',
                         choices=['base', 'large', 'huge'])
     parser.add_argument('--tasks',         nargs='+', default=['TUAB', 'TUSZ', 'TUEV', 'TUEP'])
-    parser.add_argument('--epochs',        type=int, default=30,
-                        help='最大训练轮数（默认30，early stopping 会提前终止）')
-    parser.add_argument('--patience',      type=int, default=5,
-                        help='early stopping patience（默认5）')
-    parser.add_argument('--warmup_epochs', type=int, default=2,
-                        help='warmup epoch 数（默认2）')
+    parser.add_argument('--epochs',        type=int, default=10,
+                        help='线性探针训练轮数（默认10）')
     parser.add_argument('--batch_size',    type=int, default=256)
     parser.add_argument('--lr',            type=float, default=1e-3)
     parser.add_argument('--num_workers',   type=int, default=8)
