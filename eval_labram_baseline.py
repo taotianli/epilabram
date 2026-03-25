@@ -276,11 +276,12 @@ def run_task(task: str, args, device: torch.device) -> dict:
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    best_auroc   = 0.0
-    best_metrics = {}
-    best_preds   = best_labels = None
-    no_improve   = 0
-    ckpt_path    = os.path.join(args.output_dir, f'best_{task}.pth')
+    best_auroc      = 0.0
+    best_metrics    = {}
+    best_preds      = best_labels = None
+    best_state_dict = None          # 先在 CPU 内存缓存，只在最终写一次磁盘
+    no_improve      = 0
+    ckpt_path       = os.path.join(args.output_dir, f'best_{task}.pth')
 
     for ep in range(1, args.epochs + 1):
         loss = train_epoch(model, train_loader, optimizer, criterion, device, task, args.bf16)
@@ -293,17 +294,22 @@ def run_task(task: str, args, device: torch.device) -> dict:
               f"bal_acc={metrics['bal_acc']:.4f}  auroc={metrics['auroc']:.4f}{tag}")
 
         if improved:
-            best_auroc   = metrics['auroc']
-            best_metrics = metrics
-            best_preds   = preds
-            best_labels  = labels
-            no_improve   = 0
-            torch.save(model.state_dict(), ckpt_path)
+            best_auroc      = metrics['auroc']
+            best_metrics    = metrics
+            best_preds      = preds
+            best_labels     = labels
+            no_improve      = 0
+            # 缓存到 CPU 内存，避免每次写网络文件系统（训练结束后统一落盘）
+            best_state_dict = {k: v.cpu().clone() for k, v in model.state_dict().items()}
         else:
             no_improve += 1
             if no_improve >= patience:
                 print(f"  [early stop] {patience} epochs no improvement, stopped at epoch {ep}")
                 break
+
+    # 训练结束后写一次磁盘
+    if best_state_dict is not None:
+        torch.save(best_state_dict, ckpt_path)
 
     print(f"  Best AUROC: {best_auroc:.4f}  (saved → {ckpt_path})")
     print_task_results(task, best_metrics, best_preds, best_labels, n_cls)
