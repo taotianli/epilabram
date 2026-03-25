@@ -276,7 +276,7 @@ def run_task(task: str, args, device: torch.device) -> dict:
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    best_auroc   = 0.0
+    best_auroc   = -1.0
     best_metrics = {}
     best_preds   = best_labels = None
     no_improve   = 0
@@ -287,13 +287,14 @@ def run_task(task: str, args, device: torch.device) -> dict:
         metrics, preds, labels = evaluate(model, eval_loader, device, task, n_cls, args.bf16)
         scheduler.step()
 
-        improved = metrics['auroc'] > best_auroc
+        auroc_val = metrics['auroc'] if not math.isnan(metrics['auroc']) else -1.0
+        improved = auroc_val > best_auroc
         tag = ' *' if improved else ''
         print(f"  Epoch {ep:2d}/{args.epochs}  loss={loss:.4f}  "
               f"bal_acc={metrics['bal_acc']:.4f}  auroc={metrics['auroc']:.4f}{tag}")
 
         if improved:
-            best_auroc   = metrics['auroc']
+            best_auroc   = auroc_val
             best_metrics = metrics
             best_preds   = preds
             best_labels  = labels
