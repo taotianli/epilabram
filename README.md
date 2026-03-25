@@ -63,24 +63,7 @@ python eval_labram_baseline.py \
 
 #### TUAB (Normal / Abnormal Classification)
 
-| Metric | Value |
-|---|---|
-| Accuracy | 0.8212 |
-| Balanced Accuracy | 0.8189 |
-| Macro F1 | 0.8196 |
-| Weighted F1 | 0.8209 |
-
-| Class | Precision | Recall | F1 | Support |
-|---|---|---|---|---|
-| Normal (0) | 0.8243 | 0.8492 | 0.8366 | 19,907 |
-| Abnormal (1) | 0.8174 | 0.7885 | 0.8027 | 17,038 |
-
-Confusion Matrix:
-
-|  | Pred Normal | Pred Abnormal |
-|---|---|---|
-| True Normal | 16,905 | 3,002 |
-| True Abnormal | 3,603 | 13,435 |
+> To be updated
 
 #### TUSZ (Seizure Detection)
 
@@ -99,6 +82,27 @@ Confusion Matrix:
 ### Full Fine-tuning — LaBraM-Base
 
 > Checkpoint: `labram-base.pth` | Mode: finetune | GPU: NVIDIA GH200 96GB | `experiments/labram_finetune_v3`
+
+#### TUAB (Normal / Abnormal Classification)
+
+| Metric | Value |
+|---|---|
+| Accuracy | 0.8212 |
+| Balanced Accuracy | 0.8189 |
+| Macro F1 | 0.8196 |
+| Weighted F1 | 0.8209 |
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| Normal (0) | 0.8243 | 0.8492 | 0.8366 | 19,907 |
+| Abnormal (1) | 0.8174 | 0.7885 | 0.8027 | 17,038 |
+
+Confusion Matrix:
+
+|  | Pred Normal | Pred Abnormal |
+|---|---|---|
+| True Normal | 16,905 | 3,002 |
+| True Abnormal | 3,603 | 13,435 |
 
 #### TUSZ (Seizure Detection)
 
@@ -126,10 +130,24 @@ Confusion Matrix:
 
 > To be updated
 
-#### TUAB (Normal / Abnormal Classification)
-
-> To be updated
-
 #### TUEP (Epilepsy Diagnosis)
 
-> To be updated
+| Metric | Value |
+|---|---|
+| Accuracy | 0.8889 |
+| Balanced Accuracy | 0.7588 |
+| Macro F1 | 0.7970 |
+| Weighted F1 | 0.8793 |
+| AUROC | 0.8618 |
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| Non-epilepsy (0) | 0.8427 | 0.5428 | 0.6603 | 8,240 |
+| Epilepsy (1) | 0.8957 | 0.9748 | 0.9336 | 33,199 |
+
+Confusion Matrix:
+
+|  | Pred Non-epilepsy | Pred Epilepsy |
+|---|---|---|
+| True Non-epilepsy | 4,473 | 3,767 |
+| True Epilepsy | 835 | 32,364 |
