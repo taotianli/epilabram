@@ -288,7 +288,7 @@ def run_task(task: str, args, device: torch.device) -> dict:
         scheduler.step()
 
         auroc_val = metrics['auroc'] if not math.isnan(metrics['auroc']) else -1.0
-        improved = auroc_val > best_auroc
+        improved = auroc_val > best_auroc or not best_metrics
         tag = ' *' if improved else ''
         print(f"  Epoch {ep:2d}/{args.epochs}  loss={loss:.4f}  "
               f"bal_acc={metrics['bal_acc']:.4f}  auroc={metrics['auroc']:.4f}{tag}")
