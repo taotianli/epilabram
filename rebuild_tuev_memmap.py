@@ -101,34 +101,35 @@ def mode_stratified(src, out, seed, eval_ratio):
 
 
 def mode_official(src, out, seed, val_ratio):
-    """BIOT protocol: official eval/ = test, official train/ split 80/20 by recording."""
+    """BIOT protocol: official eval/ = test, official train/ split 80/20 by recording (stratified per class)."""
     rng = random.Random(seed)
 
-    # official eval stays as test (written to 'eval' split)
+    # official eval stays as test
     eval_files = collect_files(src, ['eval'])
     print(f'Official eval files: {len(eval_files)}')
 
-    # official train split by recording 80/20
+    # stratified split of official train by class
     train_all = collect_files(src, ['train'])
-    rng.shuffle(train_all)
-    n_val = max(1, int(len(train_all) * val_ratio))
-    val_files   = train_all[:n_val]
-    train_files = train_all[n_val:]
+    by_class = {i: [] for i in range(6)}
+    for path, label_id in train_all:
+        by_class[label_id].append((path, label_id))
 
-    # print class distribution
-    for split_name, files in [('train', train_files), ('val→eval', val_files), ('test', eval_files)]:
-        by_cls = {}
-        for _, lid in files:
-            by_cls[lid] = by_cls.get(lid, 0) + 1
-        cls_str = '  '.join(f'{[k for k,v in TUEV_LABELS.items() if v==lid][0]}={c}'
-                            for lid, c in sorted(by_cls.items()))
-        print(f'  {split_name} ({len(files)} files): {cls_str}')
+    train_files, val_files = [], []
+    for label_id, cls_files in by_class.items():
+        rng.shuffle(cls_files)
+        n_val = max(1, int(len(cls_files) * val_ratio)) if cls_files else 0
+        val_files   += cls_files[:n_val]
+        train_files += cls_files[n_val:]
+        cls_name = [k for k, v in TUEV_LABELS.items() if v == label_id][0]
+        print(f'  {cls_name}: total={len(cls_files)}  train={len(cls_files)-n_val}  val={n_val}')
 
-    # in official mode: train→train, val→eval (for early stopping), test saved separately
+    rng.shuffle(train_files)
+    rng.shuffle(val_files)
+
     write_split(train_files, out, 'train')
     write_split(val_files,   out, 'eval')   # used for early stopping
     write_split(eval_files,  out, 'test')   # final test set
-    return None, None  # already written
+    return None, None
 
 
 def main():
