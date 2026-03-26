@@ -128,35 +128,36 @@ Confusion Matrix:
 
 #### TUEV (6-class Event Classification)
 
-> ⚠️ Note: results below use a custom 80/20 stratified split (not official TUH split) to ensure all 6 classes appear in eval. To be re-run with official split per BIOT protocol.
+> ⚠️ Note: official BIOT split (official train 80/20 → train/val, official eval → test). AUROC computed only over classes present in val set.
 
 | Metric | Value |
 |---|---|
-| Accuracy | 0.6198 |
-| Balanced Accuracy | 0.4190 |
-| Macro F1 | 0.4196 |
-| Weighted F1 | 0.5599 |
-| AUROC | 0.7736 |
+| Accuracy | 0.6175 |
+| Balanced Accuracy | 0.4349 |
+| Cohen's Kappa | 0.3897 |
+| Macro F1 | 0.4207 |
+| Weighted F1 | 0.5815 |
+| AUROC | 0.7715 |
 
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
-| spsw (0) | 0.1746 | 0.0733 | 0.1032 | 1,051 |
-| gped (1) | 0.7839 | 0.7385 | 0.7605 | 1,591 |
-| pled (2) | 0.6074 | 0.6381 | 0.6224 | 1,050 |
-| eyem (3) | 0.3604 | 0.1159 | 0.1753 | 1,148 |
-| artf (4) | 0.2484 | 0.0720 | 0.1116 | 2,639 |
-| bckg (5) | 0.6470 | 0.8761 | 0.7444 | 9,325 |
+| spsw (0) | 0.0000 | 0.0000 | 0.0000 | 239 |
+| gped (1) | 0.5571 | 0.8612 | 0.6766 | 1,398 |
+| pled (2) | 0.8966 | 0.6262 | 0.7374 | 1,038 |
+| eyem (3) | 0.1829 | 0.0284 | 0.0491 | 1,128 |
+| artf (4) | 0.3548 | 0.2798 | 0.3129 | 2,841 |
+| bckg (5) | 0.6925 | 0.8139 | 0.7483 | 7,239 |
 
 Confusion Matrix:
 
 |  | spsw | gped | pled | eyem | artf | bckg |
 |---|---|---|---|---|---|---|
-| spsw | 77 | 12 | 96 | 7 | 57 | 802 |
-| gped | 101 | 1175 | 134 | 15 | 19 | 147 |
-| pled | 30 | 60 | 670 | 54 | 16 | 220 |
-| eyem | 22 | 0 | 0 | 133 | 46 | 947 |
-| artf | 26 | 3 | 22 | 57 | 190 | 2341 |
-| bckg | 185 | 249 | 181 | 103 | 437 | 8170 |
+| spsw | 0 | 0 | 9 | 0 | 0 | 230 |
+| gped | 0 | 1204 | 0 | 5 | 124 | 65 |
+| pled | 56 | 173 | 650 | 0 | 53 | 106 |
+| eyem | 0 | 2 | 0 | 32 | 225 | 869 |
+| artf | 0 | 657 | 6 | 37 | 795 | 1346 |
+| bckg | 17 | 125 | 60 | 101 | 1044 | 5892 |
 
 #### TUEP (Epilepsy Diagnosis)
 
