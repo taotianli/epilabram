@@ -24,7 +24,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from sklearn.metrics import (
     balanced_accuracy_score, f1_score, roc_auc_score,
-    classification_report, confusion_matrix,
+    classification_report, confusion_matrix, cohen_kappa_score,
 )
 from tqdm.auto import tqdm
 
@@ -196,6 +196,7 @@ def evaluate(model, loader, device, task, n_classes, use_bf16=True):
     metrics['bal_acc']  = float(balanced_accuracy_score(labels, preds))
     metrics['macro_f1'] = float(f1_score(labels, preds, average='macro',    zero_division=0))
     metrics['w_f1']     = float(f1_score(labels, preds, average='weighted', zero_division=0))
+    metrics['kappa']    = float(cohen_kappa_score(labels, preds))
 
     if n_classes == 2:
         try:
@@ -222,6 +223,7 @@ def print_task_results(task, metrics, preds, labels, n_classes):
     print(f"{'='*60}")
     print(f"  Accuracy:          {metrics['acc']:.4f}")
     print(f"  Balanced Accuracy: {metrics['bal_acc']:.4f}")
+    print(f"  Cohen's Kappa:     {metrics['kappa']:.4f}")
     print(f"  Macro F1:          {metrics['macro_f1']:.4f}")
     print(f"  Weighted F1:       {metrics['w_f1']:.4f}")
     print(f"  AUROC:             {metrics['auroc']:.4f}")
@@ -280,25 +282,30 @@ def run_task(task: str, args, device: torch.device) -> dict:
     scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda)
     criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
 
-    best_auroc   = -1.0
+    best_score   = -1.0
     best_metrics = {}
     best_preds   = best_labels = None
     no_improve   = 0
     ckpt_path    = os.path.join(args.output_dir, f'best_{task}.pth')
+    # multiclass: use bal_acc for early stopping; binary: use auroc
+    use_bal_acc  = (n_cls > 2)
 
     for ep in range(1, args.epochs + 1):
         loss = train_epoch(model, train_loader, optimizer, criterion, device, task, args.bf16)
         metrics, preds, labels = evaluate(model, eval_loader, device, task, n_cls, args.bf16)
         scheduler.step()
 
-        auroc_val = metrics['auroc'] if not math.isnan(metrics['auroc']) else -1.0
-        improved = auroc_val > best_auroc or not best_metrics
+        if use_bal_acc:
+            score = metrics['bal_acc']
+        else:
+            score = metrics['auroc'] if not math.isnan(metrics['auroc']) else -1.0
+        improved = score > best_score or not best_metrics
         tag = ' *' if improved else ''
         print(f"  Epoch {ep:2d}/{args.epochs}  loss={loss:.4f}  "
               f"bal_acc={metrics['bal_acc']:.4f}  auroc={metrics['auroc']:.4f}{tag}")
 
         if improved:
-            best_auroc   = auroc_val
+            best_score   = score
             best_metrics = metrics
             best_preds   = preds
             best_labels  = labels
@@ -310,7 +317,8 @@ def run_task(task: str, args, device: torch.device) -> dict:
                 print(f"  [early stop] {patience} epochs no improvement, stopped at epoch {ep}")
                 break
 
-    print(f"  Best AUROC: {best_auroc:.4f}  (saved → {ckpt_path})")
+    metric_name = 'bal_acc' if use_bal_acc else 'auroc'
+    print(f"  Best {metric_name}: {best_score:.4f}  (saved → {ckpt_path})")
     print_task_results(task, best_metrics, best_preds, best_labels, n_cls)
     return best_metrics
 
@@ -382,12 +390,12 @@ def main():
     print(f"\n{'='*60}")
     print("  Summary")
     print(f"{'='*60}")
-    header = f"{'Task':>6}  {'Acc':>7}  {'BalAcc':>7}  {'MacroF1':>8}  {'AUROC':>7}"
+    header = f"{'Task':>6}  {'Acc':>7}  {'BalAcc':>7}  {'Kappa':>7}  {'MacroF1':>8}  {'AUROC':>7}"
     print(header)
     print('-' * len(header))
     for task, m in all_results.items():
         print(f"{task:>6}  {m['acc']:7.4f}  {m['bal_acc']:7.4f}  "
-              f"{m['macro_f1']:8.4f}  {m['auroc']:7.4f}")
+              f"{m['kappa']:7.4f}  {m['macro_f1']:8.4f}  {m['auroc']:7.4f}")
 
     # 保存结果
     out_path = os.path.join(args.output_dir, 'baseline_results.json')
