@@ -26,7 +26,13 @@ def explore_task(task, base):
             print(f'  [{split}] label file not found')
             continue
 
-        labels = np.load(label_file, allow_pickle=True)
+        meta_file = os.path.join(path, f'{split}_meta.json')
+        if os.path.exists(meta_file):
+            import json
+            meta = json.load(open(meta_file))
+            labels = np.memmap(label_file, dtype=meta['lbl_dtype'], mode='r', shape=(meta['N'],))
+        else:
+            labels = np.load(label_file, allow_pickle=True)
         unique, counts = np.unique(labels, return_counts=True)
         total = len(labels)
         print(f'\n  {split} — {total:,} samples')
