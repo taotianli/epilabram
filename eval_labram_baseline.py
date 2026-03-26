@@ -180,7 +180,7 @@ def evaluate(model, loader, device, task, n_classes, use_bf16=True):
         with torch.amp.autocast('cuda', dtype=dtype, enabled=device.type == 'cuda'):
             logits = model(eeg)
 
-        probs = torch.softmax(logits, dim=-1).float().cpu().numpy()
+        probs = torch.softmax(logits.float(), dim=-1).cpu().numpy()
         preds = probs.argmax(axis=-1)
 
         all_preds.append(preds)
