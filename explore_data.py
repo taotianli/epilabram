@@ -26,7 +26,7 @@ def explore_task(task, base):
             print(f'  [{split}] label file not found')
             continue
 
-        labels = np.load(label_file, mmap_mode='r')
+        labels = np.load(label_file, allow_pickle=True)
         unique, counts = np.unique(labels, return_counts=True)
         total = len(labels)
         print(f'\n  {split} — {total:,} samples')
