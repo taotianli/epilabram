@@ -17,6 +17,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 import h5py
 import mne
+from scipy import signal as scipy_signal
 from tqdm.auto import tqdm
 
 # ============================================================
@@ -53,7 +54,7 @@ def load_and_preprocess_edf(
     edf_path: str,
     target_fs: float = TARGET_FS,
 ) -> Tuple[Optional[np.ndarray], List[str], float]:
-    """读取 EDF → 选通道 → 重采样 → μV/100 归一化 → 对齐 23 通道"""
+    """读取 EDF → 选通道 → 重采样 → 带通滤波 → notch滤波 → μV/100 归一化 → 对齐 23 通道"""
     mne.set_log_level('ERROR')
     try:
         raw = mne.io.read_raw_edf(edf_path, preload=True, verbose=False)
@@ -69,14 +70,25 @@ def load_and_preprocess_edf(
     if abs(orig_fs - target_fs) > 1.0:
         raw.resample(target_fs, verbose=False)
 
-    data = raw.get_data() * 1e6
+    data = raw.get_data() * 1e6  # V → μV
+    fs = target_fs
+
+    # 带通滤波 0.1-75 Hz
+    nyq = fs / 2.0
+    b, a = scipy_signal.butter(4, [0.1 / nyq, 75.0 / nyq], btype='band')
+    data = scipy_signal.filtfilt(b, a, data, axis=-1)
+
+    # 50 Hz notch 滤波
+    b, a = scipy_signal.iirnotch(50.0 / nyq, Q=30.0)
+    data = scipy_signal.filtfilt(b, a, data, axis=-1)
+
     T = data.shape[1]
     aligned = np.zeros((23, T), dtype=np.float32)
     for i, ch in enumerate(raw.ch_names):
         std = _ALIAS_MAP.get(ch.upper().strip())
         if std and std in STD_IDX:
             aligned[STD_IDX[std]] = data[i].astype(np.float32)
-    aligned /= 100.0
+    aligned /= 100.0  # μV → 0.1mV，值域约 [-1, 1]
     return aligned, STANDARD_23, orig_fs
 
 # ============================================================
