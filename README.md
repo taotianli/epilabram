@@ -128,7 +128,35 @@ Confusion Matrix:
 
 #### TUEV (6-class Event Classification)
 
-> To be updated
+> ⚠️ Note: results below use a custom 80/20 stratified split (not official TUH split) to ensure all 6 classes appear in eval. To be re-run with official split per BIOT protocol.
+
+| Metric | Value |
+|---|---|
+| Accuracy | 0.6198 |
+| Balanced Accuracy | 0.4190 |
+| Macro F1 | 0.4196 |
+| Weighted F1 | 0.5599 |
+| AUROC | 0.7736 |
+
+| Class | Precision | Recall | F1 | Support |
+|---|---|---|---|---|
+| spsw (0) | 0.1746 | 0.0733 | 0.1032 | 1,051 |
+| gped (1) | 0.7839 | 0.7385 | 0.7605 | 1,591 |
+| pled (2) | 0.6074 | 0.6381 | 0.6224 | 1,050 |
+| eyem (3) | 0.3604 | 0.1159 | 0.1753 | 1,148 |
+| artf (4) | 0.2484 | 0.0720 | 0.1116 | 2,639 |
+| bckg (5) | 0.6470 | 0.8761 | 0.7444 | 9,325 |
+
+Confusion Matrix:
+
+|  | spsw | gped | pled | eyem | artf | bckg |
+|---|---|---|---|---|---|---|
+| spsw | 77 | 12 | 96 | 7 | 57 | 802 |
+| gped | 101 | 1175 | 134 | 15 | 19 | 147 |
+| pled | 30 | 60 | 670 | 54 | 16 | 220 |
+| eyem | 22 | 0 | 0 | 133 | 46 | 947 |
+| artf | 26 | 3 | 22 | 57 | 190 | 2341 |
+| bckg | 185 | 249 | 181 | 103 | 437 | 8170 |
 
 #### TUEP (Epilepsy Diagnosis)
 
