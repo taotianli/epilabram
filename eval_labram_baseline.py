@@ -200,13 +200,15 @@ def evaluate(model, loader, device, task, n_classes, use_bf16=True):
     if n_classes == 2:
         try:
             metrics['auroc'] = float(roc_auc_score(labels, probs[:, 1]))
-        except Exception:
+        except Exception as e:
+            print(f'  [auroc error] {e}')
             metrics['auroc'] = float('nan')
     else:
         try:
+            present = sorted(np.unique(labels).tolist())
             metrics['auroc'] = float(roc_auc_score(
-                labels, probs, multi_class='ovr', average='macro',
-                labels=list(range(n_classes))))
+                labels, probs[:, present], multi_class='ovr', average='macro',
+                labels=present))
         except Exception as e:
             print(f'  [auroc error] {e}')
             metrics['auroc'] = float('nan')

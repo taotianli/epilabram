@@ -1,12 +1,18 @@
 """
-Rebuild TUEV memmap with a proper per-recording 80/20 train/eval split.
-Merges the original train+eval splits so all 6 classes appear in both sets.
+Rebuild TUEV memmap with two modes:
+
+  --mode stratified (default):
+      Merge official train+eval, stratified 80/20 per class.
+      Ensures all 6 classes appear in both splits.
+
+  --mode official:
+      Follow BIOT protocol: official eval/ stays as test,
+      official train/ is split 80/20 by recording into train/val.
 
 Usage:
-    python rebuild_tuev_memmap.py \
+    python rebuild_tuev_memmap.py --mode official \
         --src /projects/u6da/tuh_processed/tuev \
-        --out /projects/u6da/tuh_processed/memmap/TUEV \
-        --seed 42
+        --out /projects/u6da/tuh_processed/memmap/TUEV
 """
 import argparse
 import glob
@@ -21,10 +27,9 @@ from tqdm.auto import tqdm
 TUEV_LABELS = {'spsw': 0, 'gped': 1, 'pled': 2, 'eyem': 3, 'artf': 4, 'bckg': 5}
 
 
-def collect_files(src):
-    """Return list of (h5_path, label_id) across all classes and original splits."""
+def collect_files(src, splits):
     files = []
-    for split in ['train', 'eval']:
+    for split in splits:
         for cls, label_id in TUEV_LABELS.items():
             pattern = os.path.join(src, split, cls, '*.h5')
             for p in sorted(glob.glob(pattern)):
@@ -55,7 +60,7 @@ def write_split(files, out_dir, split_name, C=23, T=2000):
     for path, label_id in tqdm(files, desc=f'  [{split_name}]'):
         with h5py.File(path, 'r') as f:
             k = list(f.keys())[0]
-            eeg = f[k]['eeg'][:]          # (n_segs, 23, 2000)
+            eeg = f[k]['eeg'][:]
         n = eeg.shape[0]
         eeg_mm[idx:idx+n] = eeg.astype('float16')
         lbl_mm[idx:idx+n] = label_id
@@ -71,21 +76,12 @@ def write_split(files, out_dir, split_name, C=23, T=2000):
     print(f'  [{split_name}] done → {eeg_path}')
 
 
-def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--src',  default='/projects/u6da/tuh_processed/tuev')
-    parser.add_argument('--out',  default='/projects/u6da/tuh_processed/memmap/TUEV')
-    parser.add_argument('--seed', type=int, default=42)
-    parser.add_argument('--eval_ratio', type=float, default=0.2)
-    args = parser.parse_args()
-
-    os.makedirs(args.out, exist_ok=True)
-    rng = random.Random(args.seed)
-
-    all_files = collect_files(args.src)
+def mode_stratified(src, out, seed, eval_ratio):
+    """Merge train+eval, stratified split per class."""
+    rng = random.Random(seed)
+    all_files = collect_files(src, ['train', 'eval'])
     print(f'Total files: {len(all_files)}')
 
-    # per-class stratified split so all classes appear in both sets
     train_files, eval_files = [], []
     by_class = {i: [] for i in range(6)}
     for path, label_id in all_files:
@@ -93,7 +89,7 @@ def main():
 
     for label_id, cls_files in by_class.items():
         rng.shuffle(cls_files)
-        n_eval = max(1, int(len(cls_files) * args.eval_ratio))
+        n_eval = max(1, int(len(cls_files) * eval_ratio))
         eval_files  += cls_files[:n_eval]
         train_files += cls_files[n_eval:]
         cls_name = [k for k, v in TUEV_LABELS.items() if v == label_id][0]
@@ -101,15 +97,63 @@ def main():
 
     rng.shuffle(train_files)
     rng.shuffle(eval_files)
+    return train_files, eval_files
 
-    print(f'\nWriting train ({len(train_files)} files)...')
-    write_split(train_files, args.out, 'train')
 
-    print(f'\nWriting eval ({len(eval_files)} files)...')
-    write_split(eval_files, args.out, 'eval')
+def mode_official(src, out, seed, val_ratio):
+    """BIOT protocol: official eval/ = test, official train/ split 80/20 by recording."""
+    rng = random.Random(seed)
+
+    # official eval stays as test (written to 'eval' split)
+    eval_files = collect_files(src, ['eval'])
+    print(f'Official eval files: {len(eval_files)}')
+
+    # official train split by recording 80/20
+    train_all = collect_files(src, ['train'])
+    rng.shuffle(train_all)
+    n_val = max(1, int(len(train_all) * val_ratio))
+    val_files   = train_all[:n_val]
+    train_files = train_all[n_val:]
+
+    # print class distribution
+    for split_name, files in [('train', train_files), ('val→eval', val_files), ('test', eval_files)]:
+        by_cls = {}
+        for _, lid in files:
+            by_cls[lid] = by_cls.get(lid, 0) + 1
+        cls_str = '  '.join(f'{[k for k,v in TUEV_LABELS.items() if v==lid][0]}={c}'
+                            for lid, c in sorted(by_cls.items()))
+        print(f'  {split_name} ({len(files)} files): {cls_str}')
+
+    # in official mode: train→train, val→eval (for early stopping), test saved separately
+    write_split(train_files, out, 'train')
+    write_split(val_files,   out, 'eval')   # used for early stopping
+    write_split(eval_files,  out, 'test')   # final test set
+    return None, None  # already written
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', choices=['stratified', 'official'], default='stratified')
+    parser.add_argument('--src',  default='/projects/u6da/tuh_processed/tuev')
+    parser.add_argument('--out',  default='/projects/u6da/tuh_processed/memmap/TUEV')
+    parser.add_argument('--seed', type=int, default=42)
+    parser.add_argument('--eval_ratio', type=float, default=0.2)
+    args = parser.parse_args()
+
+    os.makedirs(args.out, exist_ok=True)
+
+    if args.mode == 'official':
+        print('Mode: official (BIOT protocol)')
+        mode_official(args.src, args.out, args.seed, args.eval_ratio)
+    else:
+        print('Mode: stratified (custom split)')
+        train_files, eval_files = mode_stratified(args.src, args.out, args.seed, args.eval_ratio)
+        write_split(train_files, args.out, 'train')
+        write_split(eval_files,  args.out, 'eval')
 
     print('\nDone. Run explore_data.py to verify class distribution.')
 
 
 if __name__ == '__main__':
     main()
+
