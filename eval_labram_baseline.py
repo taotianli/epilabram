@@ -207,7 +207,8 @@ def evaluate(model, loader, device, task, n_classes, use_bf16=True):
             metrics['auroc'] = float(roc_auc_score(
                 labels, probs, multi_class='ovr', average='macro',
                 labels=list(range(n_classes))))
-        except Exception:
+        except Exception as e:
+            print(f'  [auroc error] {e}')
             metrics['auroc'] = float('nan')
 
     return metrics, preds, labels
