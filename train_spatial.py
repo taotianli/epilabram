@@ -45,7 +45,7 @@ from training.losses import HierarchicalConsistencyLoss
 from utils.seed import set_seed
 from utils.checkpoint import save_checkpoint, load_checkpoint
 from utils.logger import get_logger
-from evaluation.metrics import compute_metrics
+from evaluation.metrics import MetricTracker
 
 
 # ---------------------------------------------------------------------------
@@ -138,9 +138,13 @@ def evaluate(model: EpiLaBraM, val_datasets: list, device: torch.device,
 
         logits_cat = torch.cat(all_logits)
         labels_cat = torch.cat(all_labels)
-        n_classes = logits_cat.shape[-1]
-        metrics = compute_metrics(logits_cat, labels_cat, n_classes=n_classes)
-        results[name] = metrics
+        probs = torch.softmax(logits_cat, dim=-1).numpy()
+        preds = logits_cat.argmax(dim=-1).numpy()
+        labels_np = labels_cat.numpy()
+
+        tracker = MetricTracker()
+        tracker.update(name, preds, labels_np, probs)
+        results[name] = tracker.compute(name)
 
     return results
 
