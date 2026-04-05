@@ -262,6 +262,26 @@ class SpatialAwareLaBraM(nn.Module):
     def use_rope(self):
         return self.backbone.use_rope
 
+    @property
+    def patch_embed(self):
+        return self.backbone.patch_embed
+
+    @property
+    def patch_proj(self):
+        return self.backbone.patch_proj
+
+    @property
+    def spatial_embed(self):
+        return self.backbone.spatial_embed
+
+    @property
+    def temporal_embed(self):
+        return self.backbone.temporal_embed
+
+    @property
+    def pos_drop(self):
+        return self.backbone.pos_drop
+
     def get_electrode_coords(self) -> torch.Tensor:
         """
         返回 MNI 坐标，shape (N, 3)。
