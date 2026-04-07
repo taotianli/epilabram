@@ -416,10 +416,10 @@ def main():
         _make(TUEPDataset, 'tuep_path'),
     ]
     val_datasets = [
-        _make(TUABDataset, 'tuab_path', 'val'),
-        _make(TUSZDataset, 'tusz_path', 'val'),
-        _make(TUEVDataset, 'tuev_path', 'val'),
-        _make(TUEPDataset, 'tuep_path', 'val'),
+        _make(TUABDataset, 'tuab_path', 'eval'),
+        _make(TUSZDataset, 'tusz_path', 'dev'),
+        _make(TUEVDataset, 'tuev_path', 'eval'),
+        _make(TUEPDataset, 'tuep_path', 'eval'),
     ]
 
     os.makedirs(args.output_dir, exist_ok=True)
