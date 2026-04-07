@@ -25,6 +25,7 @@ from typing import Dict, Optional
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.amp import GradScaler, autocast
 
@@ -41,7 +42,6 @@ from models.prediction_heads import (
 from models.epilabram import EpiLaBraM
 from data.tuh_dataset import TUABDataset, TUSZDataset, TUEVDataset, TUEPDataset
 from data.preprocessing import EEGPreprocessor
-from training.losses import HierarchicalConsistencyLoss
 from utils.seed import set_seed
 from utils.checkpoint import save_checkpoint, load_checkpoint
 from utils.logger import get_logger
@@ -164,12 +164,7 @@ class SpatialTrainer:
         self.use_wandb = use_wandb
         self.logger = get_logger('spatial', output_dir)
 
-        self.criterion = HierarchicalConsistencyLoss(
-            lambda1=config.get('lambda1', 1.0),
-            lambda2=config.get('lambda2', 1.0),
-            gamma=config.get('gamma', 0.5),
-            label_smoothing=config.get('label_smoothing', 0.1),
-        )
+        self.label_smoothing = config.get('label_smoothing', 0.1)
         self.scaler = GradScaler('cuda')
 
         # 冻结原始 backbone weights，只训练：
@@ -258,13 +253,13 @@ class SpatialTrainer:
                 with autocast('cuda'):
                     res = self.model.forward_stage2(eeg, task_ids)
                     _, logits = res[task_name]
-                    loss, log = self.criterion(logits, None, None, label)
+                    loss = F.cross_entropy(logits, label,
+                                           label_smoothing=self.label_smoothing)
 
                 total_loss = total_loss + loss
-                for k, v in log.items():
-                    key = f'{task_name}/{k}'
-                    metrics[key] = metrics.get(key, 0.0) + v.item()
-                    counts[key] = counts.get(key, 0) + 1
+                key = f'{task_name}/loss'
+                metrics[key] = metrics.get(key, 0.0) + loss.item()
+                counts[key] = counts.get(key, 0) + 1
 
             self.scaler.scale(total_loss).backward()
             self.scaler.unscale_(self.optimizer)
