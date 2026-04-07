@@ -136,6 +136,8 @@ def evaluate(model: EpiLaBraM, val_datasets: list, device: torch.device,
             all_logits.append(logits.float().cpu())
             all_labels.append(label)
 
+        if len(all_logits) == 0:
+            continue
         logits_cat = torch.cat(all_logits)
         labels_cat = torch.cat(all_labels)
         probs = torch.softmax(logits_cat, dim=-1).numpy()
