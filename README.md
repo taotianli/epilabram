@@ -11,8 +11,12 @@ conda activate epilabram
 ## Data Preprocessing
 
 ```bash
-# Preprocess raw EEG data to h5 format
-python preprocess_tuh.py
+# Preprocess raw EEG data to h5 format (bandpass 0.1-75Hz, notch 50Hz, resample 200Hz, normalize /100)
+python preprocess_tuh.py \
+    --tuh_root /projects/u6da/tuh_eeg \
+    --output_dir /projects/u6da/tuh_processed \
+    --datasets tuab tusz tuev tuep \
+    --workers 32
 
 # Build memmap cache for fast data loading (one-time, reused across all runs)
 python build_memmap.py \
@@ -20,6 +24,9 @@ python build_memmap.py \
     --num_workers 32 \
     --out_dir /projects/u6da/tuh_processed/memmap
 ```
+
+> **Note — TUAR / TUEG**: These datasets are only listed as EDF file paths (no h5 conversion yet).
+> Run `preprocess_tuh.py --datasets tuar tueg` before using them for any downstream task.
 
 ## Linear Probe (Frozen Backbone)
 
@@ -180,3 +187,18 @@ Confusion Matrix:
 |---|---|---|
 | True Non-epilepsy | 4,473 | 3,767 |
 | True Epilepsy | 835 | 32,364 |
+
+---
+
+### Spatial-Aware Multi-Task Fine-tuning (coord_embed + GCN)
+
+> Backbone: `labram-base.pth` + SpatialAwareLaBraM (coord_embed + GCN k=5) | 30 epochs | GPU: NVIDIA GH200 120GB
+
+| Task | Balanced Acc | AUROC | AUC-PR | Weighted F1 | Cohen's Kappa |
+|---|---|---|---|---|---|
+| TUAB | 0.7954 | 0.8724 | 0.8658 | 0.7995 | 0.5961 |
+| TUSZ | 0.6179 | 0.8178 | 0.1612 | 0.9737 | 0.2309 |
+| TUEV | 0.2467 | — | — | 0.3277 | 0.0757 |
+| TUEP | 0.7504 | 0.7910 | 0.9051 | 0.8553 | 0.5325 |
+
+> Best checkpoint at epoch 24 (avg bal_acc). TUEV 6-class performance remains low — likely needs class-weighted loss or focal loss to handle imbalance.
