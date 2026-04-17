@@ -157,23 +157,27 @@ def evaluate(model: EpiLaBraM, val_datasets: list, device: torch.device,
 
 class SpatialTrainer:
     def __init__(self, model: EpiLaBraM, train_datasets: list, val_datasets: list,
-                 config: dict, output_dir: str, use_wandb: bool = False):
+                 config: dict, output_dir: str, use_wandb: bool = False,
+                 finetune: bool = False):
         self.model = model
         self.train_datasets = train_datasets
         self.val_datasets = val_datasets
         self.cfg = config
         self.output_dir = output_dir
         self.use_wandb = use_wandb
+        self.finetune = finetune
         self.logger = get_logger('spatial', output_dir)
 
         self.label_smoothing = config.get('label_smoothing', 0.1)
         self.scaler = GradScaler('cuda')
 
-        # 冻结原始 backbone weights，只训练：
-        #   coord_embed + gcn（新增空间模块）
-        #   task_prompts + adapters + heads（原有 stage2 可训练部分）
-        self.model.freeze_backbone()
-        # 解冻空间模块（它们在 backbone 的 wrapper 层，不在 inner backbone 里）
+        if finetune:
+            # 全参数微调：backbone + spatial + prompts + adapters + heads 全部训练
+            self.model.unfreeze_backbone()
+        else:
+            # 参数高效微调：冻结 backbone，只训练新增模块
+            self.model.freeze_backbone()
+        # 空间模块始终可训练（它们在 wrapper 层，不在 inner backbone 里）
         spatial_bb = model.backbone  # SpatialAwareLaBraM
         for p in spatial_bb.coord_embed.parameters():
             p.requires_grad_(True)
@@ -184,6 +188,8 @@ class SpatialTrainer:
         self._setup_optimizer()
 
     def _get_trainable_params(self):
+        if self.finetune:
+            return [p for p in self.model.parameters() if p.requires_grad]
         spatial_bb = self.model.backbone
         params = (
             list(spatial_bb.coord_embed.parameters())
@@ -359,6 +365,8 @@ def parse_args():
                         help='只用坐标编码，不用图卷积（ablation）')
     parser.add_argument('--gcn_k', type=int, default=5,
                         help='图卷积 kNN 邻居数')
+    parser.add_argument('--finetune', action='store_true', default=False,
+                        help='解冻 backbone 全参数微调（默认冻结 backbone）')
     return parser.parse_args()
 
 
@@ -396,7 +404,7 @@ def main():
     n_spatial = sum(p.numel() for p in model.backbone.coord_embed.parameters())
     n_gcn = sum(p.numel() for p in model.backbone.gcn.parameters()) if model.backbone.gcn else 0
     print(f"[spatial] coord_embed params: {n_spatial:,}  gcn params: {n_gcn:,}")
-    print(f"[spatial] use_gcn={args.use_gcn}  gcn_k={args.gcn_k}")
+    print(f"[spatial] use_gcn={args.use_gcn}  gcn_k={args.gcn_k}  finetune={args.finetune}")
 
     preprocessor = EEGPreprocessor(target_fs=data_cfg.get('sample_rate', 200))
     window_sec = data_cfg.get('window_sec', 10.0)
@@ -431,6 +439,7 @@ def main():
         config=train_cfg,
         output_dir=args.output_dir,
         use_wandb=args.wandb,
+        finetune=args.finetune,
     )
     trainer.train(resume_ckpt=args.resume)
 

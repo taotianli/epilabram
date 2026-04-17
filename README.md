@@ -190,9 +190,13 @@ Confusion Matrix:
 
 ---
 
-### Spatial-Aware Multi-Task Fine-tuning (coord_embed + GCN)
+### Spatial-Aware Multi-Task Fine-tuning (Parameter-Efficient)
 
-> Backbone: `labram-base.pth` + SpatialAwareLaBraM (coord_embed + GCN k=5) | 30 epochs | GPU: NVIDIA GH200 120GB
+> ⚠️ **Note**: These experiments use **frozen backbone + adapters** (parameter-efficient fine-tuning), not full fine-tuning. Performance is lower than baseline because only spatial modules + task prompts + adapters are trained. For fair comparison, backbone should be unfrozen.
+
+#### With GCN (coord_embed + GCN k=5)
+
+> Backbone: `labram-base.pth` (frozen) + SpatialAwareLaBraM | 30 epochs | GPU: NVIDIA GH200 120GB
 
 | Task | Balanced Acc | AUROC | AUC-PR | Weighted F1 | Cohen's Kappa |
 |---|---|---|---|---|---|
@@ -201,4 +205,21 @@ Confusion Matrix:
 | TUEV | 0.2467 | — | — | 0.3277 | 0.0757 |
 | TUEP | 0.7504 | 0.7910 | 0.9051 | 0.8553 | 0.5325 |
 
-> Best checkpoint at epoch 24 (avg bal_acc). TUEV 6-class performance remains low — likely needs class-weighted loss or focal loss to handle imbalance.
+Best checkpoint at epoch 24 (avg bal_acc).
+
+#### Without GCN (coord_embed only, ablation)
+
+> Backbone: `labram-base.pth` (frozen) + coord_embed only | 30 epochs | GPU: NVIDIA GH200 120GB
+
+| Task | Balanced Acc | AUROC | AUC-PR | Weighted F1 | Cohen's Kappa |
+|---|---|---|---|---|---|
+| TUAB | 0.7699 | 0.8301 | 0.7958 | 0.7722 | 0.5412 |
+| TUSZ | 0.6390 | 0.8056 | 0.2059 | 0.9740 | 0.2754 |
+| TUEV | 0.2230 | — | — | 0.3057 | 0.0494 |
+| TUEP | 0.7357 | 0.7867 | 0.9045 | 0.8435 | 0.5000 |
+
+Best checkpoint at epoch 24 (avg bal_acc).
+
+**Ablation findings**: GCN consistently improves performance over coord_embed alone on TUAB/TUEV/TUEP, confirming that spatial graph convolution helps. TUSZ shows mixed results (higher bal_acc without GCN but lower AUROC).
+
+**Next steps**: Re-run spatial experiments with **unfrozen backbone** for fair comparison with baseline full fine-tuning.
