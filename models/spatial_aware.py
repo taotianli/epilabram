@@ -229,6 +229,7 @@ class SpatialAwareLaBraM(nn.Module):
         embed_dim = backbone.embed_dim
 
         self.coord_embed = ElectrodeCoordEmbedding(embed_dim, n_channels)
+        self.coord_norm = nn.LayerNorm(embed_dim, eps=1e-6)
         if use_gcn:
             self.gcn = EEGGraphConv(embed_dim, n_channels, k=gcn_k)
         else:
@@ -322,7 +323,7 @@ class SpatialAwareLaBraM(nn.Module):
 
         # 3. 注入坐标编码（在 CLS token 拼接之前，只作用于 patch tokens）
         coord_emb = self.coord_embed(A, B)   # (B, N*A, D)
-        x_embed = x_embed + coord_emb
+        x_embed = self.coord_norm(x_embed + coord_emb)
 
         # 4. 图卷积空间聚合（可选）
         if self.gcn is not None:
