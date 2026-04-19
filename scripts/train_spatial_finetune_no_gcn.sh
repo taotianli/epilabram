@@ -33,7 +33,8 @@ python train_spatial.py \
     --stage1_ckpt checkpoints/labram-base.pth \
     --output_dir /projects/u6da/epilabram/spatial_finetune_no_gcn \
     --finetune \
-    --no_gcn
+    --no_gcn \
+    --peak_lr 1e-4
 
 echo "=========================================="
 echo "Done: $(date)"

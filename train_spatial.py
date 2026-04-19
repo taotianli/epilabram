@@ -358,6 +358,7 @@ def parse_args():
     parser.add_argument('--wandb', action='store_true')
     parser.add_argument('--batch_size', type=int, default=None)
     parser.add_argument('--epochs', type=int, default=None)
+    parser.add_argument('--peak_lr', type=float, default=None)
     # 空间模块选项
     parser.add_argument('--use_gcn', action='store_true', default=True,
                         help='使用图卷积空间聚合（默认开启）')
@@ -381,6 +382,8 @@ def main():
         cfg['training']['batch_size'] = args.batch_size
     if args.epochs:
         cfg['training']['total_epochs'] = args.epochs
+    if args.peak_lr:
+        cfg['training']['peak_lr'] = args.peak_lr
 
     data_cfg = cfg.get('data', {})
     train_cfg = {
